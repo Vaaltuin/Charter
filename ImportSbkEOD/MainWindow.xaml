@@ -1,0 +1,44 @@
+﻿<Window x:Class="ImportSbkEOD.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Testing imports to my data base" Height="800" Width="1000">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="Auto"/>
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="39*"/>
+      <RowDefinition Height="731*"/>
+    </Grid.RowDefinitions>
+    <Button x:Name="btnImport" Content="Import" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Center" Width="75" Click="btnImport_Click" Height="22" Grid.Column="2"/>
+    <StackPanel Grid.Column="1" Orientation="Horizontal">
+      <TextBox x:Name="txtSearchCriteria" HorizontalAlignment="Left" Margin="10,0,0,0" TextWrapping="Wrap" Text="cfd*.csv" VerticalAlignment="Center" Width="100" Grid.Row="1"/>
+      <Button x:Name="btnSearch" Content="Search folder" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Center" Click="btnSearch_Click" Grid.Column="1"/>
+    </StackPanel>
+    <Label Content="File to find&#xD;&#xA;" HorizontalAlignment="Left" Margin="30,1,0,0" VerticalAlignment="Top" Height="42" Width="66" Grid.Row="1"/>
+    <ListView x:Name="lvFiles" Margin="0" Grid.Row="1" Grid.ColumnSpan="3">
+      <ListView.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="Clear" Click="ClearlvFiles"/>
+        </ContextMenu>
+      </ListView.ContextMenu>
+      <ListView.View>
+        <GridView>
+          <GridViewColumn/>
+        </GridView>
+      </ListView.View>
+    </ListView>
+    <StackPanel Margin="0" Orientation="Horizontal" VerticalAlignment="Center">
+      <StackPanel.Children>
+        <Label Content="Folder:"/>
+        <ComboBox x:Name="cboFolderPath" HorizontalAlignment="Left" Margin="10,0,0,0" SelectedIndex="0" Grid.Column="2" VerticalAlignment="Top">
+          <ListBoxItem Content="c:\Users\Wynand\Downloads" VerticalAlignment="Top" HorizontalAlignment="Left"/>
+
+        </ComboBox>
+      </StackPanel.Children>
+    </StackPanel>
+
+  </Grid>
+</Window>

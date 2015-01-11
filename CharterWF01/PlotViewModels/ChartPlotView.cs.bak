@@ -1,0 +1,770 @@
+﻿// --------------------------------------------------------------------------------------------------------------------
+// <copyright file="CustomOxyPlot.cs" company="Wynand">
+//   
+//   Permission is hereby granted, free of charge, to any person obtaining a
+//   copy of this software and associated documentation files (the
+//   "Software"), to deal in the Software without restriction, including
+//   without limitation the rights to use, copy, modify, merge, publish,
+//   distribute, sublicense, and/or sell copies of the Software, and to
+//   permit persons to whom the Software is furnished to do so, subject to
+//   the following conditions:
+//   
+//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+//   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+//   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+//   IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+//   CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+//   TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+//   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// </copyright>
+// <summary>
+//   ...
+// </summary>
+// --------------------------------------------------------------------------------------------------------------------
+namespace CharterWF
+{
+   using System;
+   using System.Drawing;
+   using System.Windows.Forms;
+   using OxyPlot;
+   using OxyPlot.Annotations;
+   using WBGraphicUtils;
+
+   public enum ChartTimeFrame { Daily, Weekly, Monthly, Yearly };
+   public enum CandleSpan { Refresh, Day, Week, Month };
+   public enum DrawingType { Moving, Deleting, ArrowLine, ArrowLineText, Line, LineText, LDT, Rectangle, Ellipse, Text };
+   public enum AnnotationType { None, ArrowLine, Line, Text, LDT }
+   public enum LineOrientationFreedom { Vertical, Horizontal, Free }
+   public enum LineDrawStyle { Free, MouseDownToInfinity, Infinety, Controlled }
+
+   /// <summary>
+   /// This class creates a derived chart where in I can drag/move on the chart with my methods
+   /// that are much faster than the slow manipulation of the annotations as provided by OxyPlot.
+   /// </summary>
+   public class ChartPlotView : OxyPlot.WindowsForms.PlotView
+   {
+      private enum MovingAnnotation
+      {
+         None, Arrow, Text, Line, InfiniteLine, LineInfiniteHorizontal, LineInfiniteVertical, LineVertical,
+         LineMD2InfiniteVerticalUp, LineMD2InfiniteVerticalDown, LineMD2InfiniteRight, LineMD2InfiniteLeft, LineMD2InfiniteHorizontalRight,
+         LineMD2InfiniteHorizontalLeft, LDT
+      };
+      private enum MoveStyle { P1, P2, Centre };
+
+      public event EventHandler<DrawingEventArgs> DrawingDone;
+      public DrawingType DrawingType { get { return drawingType; } set { drawingType = value; } }
+      public bool IsModified = false;
+
+      private bool isDrawing = false;
+      private bool isMoving = false;
+      private DrawingType drawingType;
+      private Point oldMousePoint, mouseDownPoint;
+      private GDI32 gdi;
+      private MovingAnnotation annotationMovingStyle;
+      private NativeTextRenderer tr;
+      private Font font;
+      private Size size;
+      private TextAnnotation draggedTextAnnotation;
+      private ArrowAnnotation draggedArrowAnnotation;
+      private LineAnnotation draggedLineAnnotation;
+      private MoveStyle arrowMovingStyle;
+      private DrawingParams drawingParams = new DrawingParams();
+      private Point moveP1;
+      private Point moveP2;
+      private LDTAnnotation draggedLDTAnnotation;
+      private Point mp1 = new Point(0, 0);
+      private Point mp2 = new Point(0, 0);
+      private Point p1 = new Point(0, 0);
+      private Point p2 = new Point(0, 0);
+      private HitTestResult firstHit = null;
+
+      public ChartPlotView()
+      {
+         gdi = new GDI32();
+      }
+
+      protected override void OnMouseDown(MouseEventArgs e)
+      {
+         if (e.Button == MouseButtons.Left)
+         {
+            oldMousePoint = mouseDownPoint = new Point(e.X, e.Y);
+            drawingParams.XorP1 = new Point(e.X, e.Y);
+            drawingParams.XorP2 = drawingParams.XorP1;
+
+            switch (DrawingType)
+            {
+               case DrawingType.LDT:
+                  isDrawing = true;
+                  break;
+               case DrawingType.ArrowLine:
+                  isDrawing = true;
+                  break;
+               case DrawingType.Text:
+                  isDrawing = true;
+                  XorDrawString(MainWindow.NewAnnotationText, MainWindow.fontName, MainWindow.fontSize, e.X, e.Y);
+                  break;
+               case DrawingType.Moving:
+                  #region Moving
+                  isMoving = true;
+
+                  // test whether we are hitting an annotation
+                  foreach (var a in this.Model.Annotations)
+                  {
+                     var args = new HitTestArguments(new ScreenPoint(e.X, e.Y), 10);
+                     firstHit = a.HitTest(args);
+                     if (firstHit != null)
+                     {
+                        // Select the appropriate annotation
+                        if (firstHit.Element is LineAnnotation)
+                        #region Lines
+                        {
+                           moveP1 = new Point(0, 0);
+                           moveP2 = new Point(0, 0);
+                           draggedLineAnnotation = firstHit.Element as LineAnnotation;
+                           switch (draggedLineAnnotation.Type)
+                           {
+                              case LineAnnotationType.Horizontal:
+                                 if (draggedLineAnnotation.MinimumX == Double.MinValue && draggedLineAnnotation.MaximumX == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineInfiniteHorizontal;
+                                 else if (draggedLineAnnotation.MinimumX > Double.MinValue && draggedLineAnnotation.MaximumX == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteHorizontalRight;
+                                 else if (draggedLineAnnotation.MinimumX == Double.MinValue && draggedLineAnnotation.MaximumX < Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteHorizontalLeft;
+                                 break;
+                              case LineAnnotationType.LinearEquation:
+                                 if (draggedLineAnnotation.MinimumX == Double.MinValue && draggedLineAnnotation.MaximumX == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.InfiniteLine;
+                                 else if (draggedLineAnnotation.MinimumX > Double.MinValue && draggedLineAnnotation.MaximumX < Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.Line;
+                                 else if (draggedLineAnnotation.MinimumX > Double.MinValue && draggedLineAnnotation.MaximumX == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteRight;
+                                 else if (draggedLineAnnotation.MinimumX == Double.MinValue && draggedLineAnnotation.MaximumX < Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteLeft;
+                                 break;
+                              case LineAnnotationType.Vertical:
+                                 if (draggedLineAnnotation.MinimumY > Double.MinValue && draggedLineAnnotation.MaximumY < Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineVertical;
+                                 else if (draggedLineAnnotation.MinimumY == Double.MinValue && draggedLineAnnotation.MaximumY == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineInfiniteVertical;
+                                 else if (draggedLineAnnotation.MinimumY > Double.MinValue && draggedLineAnnotation.MaximumY == Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteVerticalUp;
+                                 else if (draggedLineAnnotation.MinimumY == Double.MinValue && draggedLineAnnotation.MaximumY < Double.MaxValue)
+                                    annotationMovingStyle = MovingAnnotation.LineMD2InfiniteVerticalDown;
+                                 break;
+                           }
+                        }
+                        #endregion
+                        else if (firstHit.Element is ArrowAnnotation)
+                        {
+                           annotationMovingStyle = MovingAnnotation.Arrow;
+                           draggedArrowAnnotation = firstHit.Element as ArrowAnnotation;
+
+                           // Decide which movestyle
+                           if (IsClose(new Point(e.X, e.Y), draggedArrowAnnotation.Transform(draggedArrowAnnotation.StartPoint), 10))
+                           {
+                              arrowMovingStyle = MoveStyle.P1;
+                           }
+                           else if (IsClose(new Point(e.X, e.Y), draggedArrowAnnotation.Transform(draggedArrowAnnotation.EndPoint), 10))
+                           {
+                              arrowMovingStyle = MoveStyle.P2;
+                           }
+                           else
+                              arrowMovingStyle = MoveStyle.Centre;
+
+                           // draw the selected annotation:
+                           gdi.DrawLine(CreateGraphics(), ToPoint(draggedArrowAnnotation.StartPoint), ToPoint(draggedArrowAnnotation.EndPoint));
+                           break;
+                        }
+                        else if (firstHit.Element is TextAnnotation)
+                        {
+                           annotationMovingStyle = MovingAnnotation.Text;
+                           draggedTextAnnotation = firstHit.Element as TextAnnotation;
+                           XorDrawString(draggedTextAnnotation.Text, draggedTextAnnotation.Font, MainWindow.fontSize, e.X, e.Y);
+                        }
+                        else if (firstHit.Element is LDTAnnotation)
+                        {
+                           annotationMovingStyle = MovingAnnotation.LDT;
+                           draggedLDTAnnotation = firstHit.Element as LDTAnnotation;
+                           //  XorDrawString(draggedTextAnnotation.Text, draggedTextAnnotation.Font, MainWindow.fontSize, e.X, e.Y);
+                        }
+                     }
+                  }
+                  #endregion
+                  break;
+               case DrawingType.Deleting:
+                  foreach (var a in this.Model.Annotations)
+                  {
+                     var args = new HitTestArguments(new ScreenPoint(e.X, e.Y), 10);
+                     var firstHit = a.HitTest(args);
+                     if (firstHit != null)
+                     {
+                        Model.Annotations.Remove(firstHit.Element as Annotation);
+                        this.IsModified = true;
+                        Model.InvalidatePlot(false);
+                        break;
+                     }
+                  }
+                  break;
+               case DrawingType.Line:
+                  isDrawing = true;
+                  break;
+            }
+            // It is necessary to disable the tracker as it interferes with the XORing during rubberbanding,
+            // leaving artifacts on the screen
+            // This is easily achieved by not calling the base mouse movement
+            return;
+            //}
+         }
+         base.OnMouseDown(e);
+      }
+
+      public void DoMouseMove(System.Windows.Forms.MouseEventArgs e)
+      {
+         float y1;
+         float y2;
+         Point laP1;
+         Point laP2;
+
+         // check whether the mouse is over an annotation (to be possibly manipulated)
+         foreach (var a in this.Model.Annotations)
+         }
+            var args = new HitTestArguments(new ScreenPoint(e.X, e.Y), 10);
+            firstHit = a.HitTest(args);
+         if (e.Button == MouseButtons.Left)
+         {
+            var isShift = System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftShift) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightShift);
+            var isCtrl = System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftCtrl) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightCtrl);
+            var isAlt = System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftAlt) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightAlt);
+
+            #region MouseMoveExisting
+            if (isMoving)
+            {
+               int deltaX = e.X - mouseDownPoint.X;
+               int deltaY = e.Y - mouseDownPoint.Y;
+               double dataStartX;
+               double dataStartY;
+               double screenStartX;
+               double screenStartY;
+               double screenSlope;
+               double PtX;
+               double PtY;
+
+               switch (annotationMovingStyle)
+               {
+                  case MovingAnnotation.LineVertical:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1.X = (int)(mouseDownPoint.X + deltaX);
+                     moveP1.Y = (int)this.Model.DefaultYAxis.Transform(draggedLineAnnotation.MinimumY) + deltaY;
+                     int lineLen = (int)(this.Model.DefaultYAxis.Transform(draggedLineAnnotation.MaximumY) - this.Model.DefaultYAxis.Transform(draggedLineAnnotation.MinimumY));
+                     moveP2 = new Point(mouseDownPoint.X + deltaX, mouseDownPoint.Y + deltaY + lineLen);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteHorizontalLeft:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(mouseDownPoint.X + deltaX, mouseDownPoint.Y + deltaY);
+                     moveP2 = new Point(0, mouseDownPoint.Y + deltaY);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteVerticalDown:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(mouseDownPoint.X + deltaX, mouseDownPoint.Y + deltaY);
+                     moveP2 = new Point(mouseDownPoint.X + deltaX, Height);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteHorizontalRight:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(mouseDownPoint.X + deltaX, mouseDownPoint.Y + deltaY);
+                     moveP2 = new Point(Width, mouseDownPoint.Y + deltaY);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.InfiniteLine:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     // get X data points for 0 and Width
+                     double xData0 = this.Model.DefaultXAxis.InverseTransform(0);
+                     double xDataWidth = this.Model.DefaultXAxis.InverseTransform(Width);
+                     double yData0 = xData0 * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept;
+                     double yDataWidth = xDataWidth * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept;
+                     double yScreen0 = this.Model.DefaultYAxis.Transform(yData0);
+                     double yScreenWidth = this.Model.DefaultYAxis.Transform(yDataWidth);
+                     screenSlope = (yScreenWidth - yScreen0) / Width;
+                     PtX = mouseDownPoint.X + deltaX;
+                     PtY = mouseDownPoint.Y + deltaY;
+                     moveP1.X = 0;
+                     moveP1.Y = (int)(PtY - PtX * screenSlope);
+                     moveP2.X = Width;
+                     moveP2.Y = (int)(PtY + (Width - PtX) * screenSlope);
+
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteLeft:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     dataStartX = draggedLineAnnotation.MaximumX;
+                     dataStartY = draggedLineAnnotation.MaximumX * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept;
+
+                     screenStartX = this.Model.DefaultXAxis.Transform(dataStartX);
+                     screenStartY = this.Model.DefaultYAxis.Transform(dataStartY);
+                     moveP1 = new Point((int)e.X, (int)e.Y);
+                     screenSlope = (this.Model.DefaultYAxis.Transform(dataStartY + draggedLineAnnotation.Slope) - this.Model.DefaultYAxis.Transform(dataStartY)) /
+                                          (this.Model.DefaultXAxis.Transform(dataStartX + 1) - this.Model.DefaultXAxis.Transform(dataStartX));
+                     moveP2 = new Point(0, moveP1.Y - (int)((moveP1.X) * screenSlope));
+
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteRight:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     dataStartX = draggedLineAnnotation.MinimumX;
+                     dataStartY = draggedLineAnnotation.MinimumX * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept;
+
+                     screenStartX = this.Model.DefaultXAxis.Transform(dataStartX);
+                     screenStartY = this.Model.DefaultYAxis.Transform(dataStartY);
+                     moveP1 = new Point((int)e.X, (int)e.Y);
+
+                     screenSlope = (this.Model.DefaultYAxis.Transform(dataStartY + draggedLineAnnotation.Slope) - this.Model.DefaultYAxis.Transform(dataStartY)) /
+                                          (this.Model.DefaultXAxis.Transform(dataStartX + 1) - this.Model.DefaultXAxis.Transform(dataStartX));
+                     moveP2 = new Point(Width, moveP1.Y + (int)((Width - moveP1.X) * screenSlope));
+
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineMD2InfiniteVerticalUp:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(mouseDownPoint.X + deltaX, mouseDownPoint.Y + deltaY);
+                     moveP2 = new Point(mouseDownPoint.X + deltaX, 0);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineInfiniteVertical:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(e.X, 0);
+                     moveP2 = new Point(e.X, Height);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.LineInfiniteHorizontal:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     moveP1 = new Point(0, e.Y);
+                     moveP2 = new Point(Width, e.Y);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.Line:
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     laP1 = ToPoint(draggedLineAnnotation.MinimumX, draggedLineAnnotation.MinimumX * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept);
+                     laP2 = ToPoint(draggedLineAnnotation.MaximumX, draggedLineAnnotation.MaximumX * draggedLineAnnotation.Slope + draggedLineAnnotation.Intercept);
+                     moveP1 = new Point(laP1.X + deltaX, laP1.Y + deltaY);
+                     moveP2 = new Point(laP2.X + deltaX, laP2.Y + deltaY);
+                     gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     break;
+
+                  case MovingAnnotation.Arrow:
+                     if (arrowMovingStyle == MoveStyle.Centre)
+                     {
+                        gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                        Point aaP1 = ToPoint(draggedArrowAnnotation.StartPoint);
+                        Point aaP2 = ToPoint(draggedArrowAnnotation.EndPoint);
+                        moveP1 = new Point(aaP1.X + deltaX, aaP1.Y + deltaY);
+                        moveP2 = new Point(aaP2.X + deltaX, aaP2.Y + deltaY);
+                        gdi.DrawLine(CreateGraphics(), moveP1, moveP2);
+                     }
+                     else if (arrowMovingStyle == MoveStyle.P1)
+                     {
+                        gdi.DrawLine(CreateGraphics(), oldMousePoint, ToPoint(draggedArrowAnnotation.EndPoint));
+                        gdi.DrawLine(CreateGraphics(), new Point(e.X, e.Y), ToPoint(draggedArrowAnnotation.EndPoint));
+                     }
+                     else if (arrowMovingStyle == MoveStyle.P2)
+                     {
+                        gdi.DrawLine(CreateGraphics(), ToPoint(draggedArrowAnnotation.StartPoint), oldMousePoint);
+                        gdi.DrawLine(CreateGraphics(), ToPoint(draggedArrowAnnotation.StartPoint), new Point(e.X, e.Y));
+                     }
+                     break;
+
+                  case MovingAnnotation.Text:
+                     XorDrawString(draggedTextAnnotation.Text, draggedTextAnnotation.Font, MainWindow.fontSize, oldMousePoint.X, oldMousePoint.Y);
+                     XorDrawString(draggedTextAnnotation.Text, draggedTextAnnotation.Font, MainWindow.fontSize, e.X, e.Y);
+                     break;
+               }
+               oldMousePoint = new Point(e.X, e.Y);
+               return; // stop tracker from poping up
+            }
+            #endregion
+            #region MouseMoveNew
+            else if (isDrawing)
+            {
+               switch (DrawingType)
+               {
+                  case DrawingType.LDT:
+                     break;
+
+                  case DrawingType.ArrowLine:
+                     gdi.DrawLine(CreateGraphics(), mouseDownPoint, new Point(e.X, e.Y));
+                     gdi.DrawLine(CreateGraphics(), mouseDownPoint, oldMousePoint);
+                     break;
+
+                  case DrawingType.Text:
+                     tr = new NativeTextRenderer(CreateGraphics());
+                     Font f = new Font(MainWindow.fontName, MainWindow.fontSize);
+                     tr.XorDrawString(MainWindow.NewAnnotationText, f, new Point(oldMousePoint.X - size.Width / 2, oldMousePoint.Y - size.Height));
+                     tr.XorDrawString(MainWindow.NewAnnotationText, f, new Point(e.X - size.Width / 2, e.Y - size.Height));
+                     tr.Dispose();
+                     break;
+
+                  case DrawingType.Line:
+                     // cancel old line
+                     gdi.DrawLine(CreateGraphics(), drawingParams.XorP1, drawingParams.XorP2);
+                     drawingParams.lineOrientationFreedom = LineOrientationFreedom.Free;
+                     drawingParams.lineDrawStyle = LineDrawStyle.Free;
+
+                     Point newPos = new Point(e.X, e.Y);
+                     if (isCtrl)
+                     {
+                        drawingParams.lineDrawStyle = LineDrawStyle.Controlled;
+                        if (Math.Abs(e.X - mouseDownPoint.X) < Math.Abs(e.Y - mouseDownPoint.Y))
+                        {
+                           newPos.X = mouseDownPoint.X;
+                           drawingParams.lineOrientationFreedom = LineOrientationFreedom.Vertical;
+                        }
+                        else
+                        {
+                           newPos.Y = mouseDownPoint.Y;
+                           drawingParams.lineOrientationFreedom = LineOrientationFreedom.Horizontal;
+                        }
+                     }
+
+                     if (isShift && !isAlt)
+                     { // Draw the lines across the whole screen.
+                        drawingParams.lineDrawStyle = LineDrawStyle.Infinety;
+
+                        // calculate old line cancelling points
+                        drawingParams.Slope = 0;
+                        if ((oldMousePoint.X - mouseDownPoint.X) == 0)
+                        {
+                           drawingParams.Slope = 1100000;
+                        }
+                        else
+                           drawingParams.Slope = (float)(oldMousePoint.Y - mouseDownPoint.Y) / (float)(oldMousePoint.X - mouseDownPoint.X);
+
+                        // calculate the new draw points
+                        if ((newPos.X - mouseDownPoint.X) == 0)
+                           drawingParams.Slope = 1100000;
+                        else
+                           drawingParams.Slope = (float)(newPos.Y - mouseDownPoint.Y) / (float)(newPos.X - mouseDownPoint.X);
+
+                        // draw the new line
+                        y1 = mouseDownPoint.Y - (mouseDownPoint.X * drawingParams.Slope);
+                        y2 = newPos.Y + (Width - newPos.X) * drawingParams.Slope;
+                        switch (drawingParams.lineOrientationFreedom)
+                        {
+                           case LineOrientationFreedom.Free:
+                              p1 = new Point(0, (int)y1);
+                              p2 = new Point(Width, (int)y2);
+                              break;
+                           case LineOrientationFreedom.Horizontal:
+                              p1 = new Point(0, (int)e.Y);
+                              p2 = new Point(Width, (int)e.Y);
+                              break;
+                           case LineOrientationFreedom.Vertical:
+                              p1 = new Point((int)e.X, 0);
+                              p2 = new Point((int)e.X, Height);
+                              break;
+                        }
+                     }
+                     else if (isAlt)
+                     {
+                        drawingParams.lineDrawStyle = LineDrawStyle.MouseDownToInfinity;
+
+                        // calculate the new draw points
+                        if ((newPos.X - mouseDownPoint.X) == 0)
+                           drawingParams.Slope = float.MaxValue;
+                        else
+                           drawingParams.Slope = (float)(newPos.Y - mouseDownPoint.Y) / (float)(newPos.X - mouseDownPoint.X);
+
+                        // draw the new line
+                        switch (drawingParams.lineOrientationFreedom)
+                        {
+                           case LineOrientationFreedom.Horizontal:
+                              if (e.X >= mouseDownPoint.X)
+                              {
+                                 p1 = new Point(mouseDownPoint.X, (int)e.Y);
+                                 p2 = new Point(Width, (int)e.Y);
+                              }
+                              else
+                              {
+                                 p1 = new Point(mouseDownPoint.X, (int)e.Y);
+                                 p2 = new Point(0, (int)e.Y);
+                              }
+                              break;
+                           case LineOrientationFreedom.Vertical:
+                              if (e.Y >= mouseDownPoint.Y)
+                              {
+                                 p1 = new Point((int)e.X, (int)mouseDownPoint.Y);
+                                 p2 = new Point((int)e.X, Height);
+                              }
+                              else
+                              {
+                                 p1 = new Point((int)e.X, (int)mouseDownPoint.Y);
+                                 p2 = new Point((int)e.X, 0);
+                              }
+                              break;
+                           default:
+                              p1 = mouseDownPoint;
+                              if (newPos.X >= mouseDownPoint.X)
+                              {
+                                 y2 = newPos.Y + (Width - newPos.X) * drawingParams.Slope;
+                                 p2 = new Point(Width, (int)y2);
+                              }
+                              else
+                              {
+                                 y2 = newPos.Y - (newPos.X) * drawingParams.Slope;
+                                 p2 = new Point(0, (int)y2);
+                              }
+                              break;
+                        }
+                     }
+                     else
+                     {
+                        p1 = mouseDownPoint;
+                        p2 = newPos;
+                     }
+
+                     gdi.DrawLine(CreateGraphics(), p1, p2);
+
+                     oldMousePoint = newPos;
+                     drawingParams.XorP1 = p1;
+                     drawingParams.XorP2 = p2;
+                     return;
+               }
+            }
+            #endregion
+            oldMousePoint = new Point(e.X, e.Y);
+         }
+      }
+
+      protected override void OnMouseUp(MouseEventArgs e)
+      {
+         if (isMoving)
+         #region Moving
+         {
+            int deltaX = e.X - mouseDownPoint.X;
+            int deltaY = e.Y - mouseDownPoint.Y;
+            DataPoint eDataPoint;
+
+            deltaX = oldMousePoint.X - mouseDownPoint.X;
+            deltaY = oldMousePoint.Y - mouseDownPoint.Y;
+            this.IsModified = true;
+            Point aaP1;
+            Point aaP2;
+
+            switch (annotationMovingStyle)
+            {
+               case MovingAnnotation.LDT:
+                  aaP1 = ToPoint(draggedLDTAnnotation.StartPoint);
+                  aaP2 = ToPoint(draggedLDTAnnotation.EndPoint);
+                  gdi.DrawLine(CreateGraphics(), new Point(aaP1.X + deltaX, aaP1.Y + deltaY), new Point(aaP2.X + deltaX, aaP2.Y + deltaY));
+                  draggedLDTAnnotation.StartPoint = draggedLDTAnnotation.InverseTransform(new ScreenPoint(aaP1.X + deltaX, aaP1.Y + deltaY));
+                  draggedLDTAnnotation.EndPoint = draggedLDTAnnotation.InverseTransform(new ScreenPoint(aaP2.X + deltaX, aaP2.Y + deltaY));
+                  InvalidatePlot(false);
+                  break;
+
+               case MovingAnnotation.Text:
+                  draggedTextAnnotation.TextPosition = draggedTextAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  InvalidatePlot(false);
+                  DrawingType = DrawingType.Moving;
+                  annotationMovingStyle = MovingAnnotation.None;
+                  break;
+
+               case MovingAnnotation.Arrow:
+                  #region Arrows
+                  if (arrowMovingStyle == MoveStyle.Centre)
+                  {
+                     aaP1 = ToPoint(draggedArrowAnnotation.StartPoint);
+                     aaP2 = ToPoint(draggedArrowAnnotation.EndPoint);
+                     gdi.DrawLine(CreateGraphics(), new Point(aaP1.X + deltaX, aaP1.Y + deltaY), new Point(aaP2.X + deltaX, aaP2.Y + deltaY));
+                     draggedArrowAnnotation.StartPoint = draggedArrowAnnotation.InverseTransform(new ScreenPoint(aaP1.X + deltaX, aaP1.Y + deltaY));
+                     draggedArrowAnnotation.EndPoint = draggedArrowAnnotation.InverseTransform(new ScreenPoint(aaP2.X + deltaX, aaP2.Y + deltaY));
+                     InvalidatePlot(false);
+                  }
+                  else if (arrowMovingStyle == MoveStyle.P1)
+                  {
+                     gdi.DrawLine(CreateGraphics(), new Point(e.X, e.Y), ToPoint(draggedArrowAnnotation.EndPoint));
+                     draggedArrowAnnotation.StartPoint = draggedArrowAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                     InvalidatePlot(false);
+                  }
+                  else if (arrowMovingStyle == MoveStyle.P2)
+                  {
+                     gdi.DrawLine(CreateGraphics(), ToPoint(draggedArrowAnnotation.StartPoint), new Point(e.X, e.Y));
+                     draggedArrowAnnotation.EndPoint = draggedArrowAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                     InvalidatePlot(false);
+                  }
+                  DrawingType = DrawingType.Moving;
+                  annotationMovingStyle = MovingAnnotation.None;
+                  break;
+                  #endregion
+               #region Lines
+               case MovingAnnotation.InfiniteLine:
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.Intercept = eDataPoint.Y - (eDataPoint.X * draggedLineAnnotation.Slope);
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.Line:
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.Intercept = eDataPoint.Y - (eDataPoint.X * draggedLineAnnotation.Slope);
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineInfiniteHorizontal:
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.Y = eDataPoint.Y;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineInfiniteVertical:
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.X = eDataPoint.X;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteVerticalDown:
+                  // adjust X and MaximumY using e
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.X = eDataPoint.X;
+                  draggedLineAnnotation.MaximumY = eDataPoint.Y;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteHorizontalLeft:
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.Y = eDataPoint.Y;
+                  draggedLineAnnotation.MaximumX = eDataPoint.X;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteHorizontalRight:
+                  // adjust Y and MinumumX using e
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.Y = eDataPoint.Y;
+                  draggedLineAnnotation.MinimumX = eDataPoint.X;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteLeft:
+                  // adjust MaximumX and Intercept using e
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.MaximumX = eDataPoint.X;
+                  draggedLineAnnotation.Intercept = eDataPoint.Y - (eDataPoint.X * draggedLineAnnotation.Slope);
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteRight:
+                  // adjust MinimumX and Intercept using e
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.MinimumX = eDataPoint.X;
+                  draggedLineAnnotation.Intercept = eDataPoint.Y - (eDataPoint.X * draggedLineAnnotation.Slope);
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineMD2InfiniteVerticalUp:
+                  // adjust X and MinimumY using e
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.X = eDataPoint.X;
+                  draggedLineAnnotation.MinimumY = eDataPoint.Y;
+                  Invalidate(false);
+                  break;
+
+               case MovingAnnotation.LineVertical:
+                  // adjust X, MaximumY and MinimumY using delta
+                  eDataPoint = draggedLineAnnotation.InverseTransform(new ScreenPoint(e.X, e.Y));
+                  draggedLineAnnotation.X = draggedLineAnnotation.XAxis.InverseTransform(e.X);
+                  draggedLineAnnotation.MinimumY = draggedLineAnnotation.YAxis.InverseTransform(draggedLineAnnotation.YAxis.Transform(draggedLineAnnotation.MinimumY) + deltaY);
+                  draggedLineAnnotation.MaximumY = draggedLineAnnotation.YAxis.InverseTransform(draggedLineAnnotation.YAxis.Transform(draggedLineAnnotation.MaximumY) + deltaY);
+                  Invalidate(false);
+                  break;
+
+               #endregion
+            }
+            isMoving = false;
+            annotationMovingStyle = MovingAnnotation.None;
+         }
+         #endregion
+         else if ((isDrawing) && (e.Button == MouseButtons.Left))
+         {
+            isDrawing = false;
+            base.InvalidatePlot(false);
+            if (DrawingDone != null)
+            {
+               // pass on to Annotations to draw the annotation
+               DrawingDone(this, new DrawingEventArgs(drawingParams, DrawingType, mouseDownPoint, new Point(e.X, e.Y)));
+            }
+         }
+         base.OnMouseUp(e);
+      }
+
+      private Point ToPoint(DataPoint p)
+      {
+         ScreenPoint ps = this.Model.DefaultXAxis.Transform(p.X, p.Y, this.Model.DefaultYAxis);
+         return new Point((int)ps.X, (int)ps.Y);
+      }
+
+      private Point ToPoint(double x, double y)
+      {
+         ScreenPoint ps = this.Model.DefaultXAxis.Transform(x, y, this.Model.DefaultYAxis);
+         return new Point((int)ps.X, (int)ps.Y);
+      }
+
+      private bool IsClose(Point p1, ScreenPoint p2, int tollerance)
+      {
+         return ((Math.Pow(p1.X - p2.X, 2) + Math.Pow(p1.Y - p2.Y, 2)) < tollerance * tollerance);
+      }
+
+      private void XorDrawString(string text, string fontName, int fontSize, int x, int y)
+      {
+         tr = new NativeTextRenderer(CreateGraphics());
+         font = new Font(fontName, fontSize);
+         size = tr.MeasureString(text, font);
+         tr.XorDrawString(text, font, new Point(x - size.Width / 2, y - size.Height));
+         tr.Dispose();
+      }
+
+      public class DrawingEventArgs : EventArgs
+      {
+         public DrawingParams drawingParams { get; set; }
+         public DrawingType Action { get { return action; } }
+         public Point Start { get { return start; } }
+         public Point End { get { return end; } }
+
+         public DrawingEventArgs(DrawingParams drawingParams, DrawingType action, Point start, Point end)
+         {
+            this.drawingParams = drawingParams;
+            this.action = action;
+            this.start = start;
+            this.end = end;
+         }
+
+         private readonly DrawingType action;
+         private readonly Point start;
+         private readonly Point end;
+      }
+
+      public class DrawingParams
+      {
+         public DrawingParams()
+         {
+            XorP1 = new Point(0, 0);
+            XorP2 = new Point(0, 0);
+            lineOrientationFreedom = LineOrientationFreedom.Free;
+            lineDrawStyle = LineDrawStyle.Free;
+         }
+         public float Slope { get; set; }
+         public Point XorP1 { get; set; }
+         public Point XorP2 { get; set; }
+         public LineOrientationFreedom lineOrientationFreedom { get; set; }
+         public LineDrawStyle lineDrawStyle { get; set; }
+      }
+   }
+}

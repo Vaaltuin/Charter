@@ -1,0 +1,49 @@
+﻿<Window x:Class="CharterWF.DailyDataDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Daily Data Importer" Width="697" Height="303" ToolTip="Select the SBK webpage before clicking the appropriate import button">
+   <Grid Margin="0,0,2,0">
+      <Grid.ColumnDefinitions>
+         <ColumnDefinition/>
+         <ColumnDefinition/>
+         <ColumnDefinition/>
+         <ColumnDefinition/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+         <RowDefinition/>
+         <RowDefinition/>
+         <RowDefinition/>
+         <RowDefinition/>
+         <RowDefinition/>
+         <RowDefinition/>
+         <RowDefinition/>
+      </Grid.RowDefinitions>
+      <Label Content="Rina" Grid.Column="1" HorizontalAlignment="Center" FontWeight="Bold" FontSize="14"/>
+      <Label Content="Wynand" Grid.Column="2" HorizontalAlignment="Center" FontWeight="Bold" FontSize="14"/>
+      <Label Content="Total" Grid.Column="3" HorizontalAlignment="Center" FontWeight="Bold" FontSize="14"/>
+      <Label Content="Money Market Cash Balance:" Margin="10,2,0,2" Grid.Row="1" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      <TextBox Name="RinaMMCB"  Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="MMCB_TextChanged"/>
+      <TextBox Name="WynandMMCB"  Grid.Row="1" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="MMCB_TextChanged"/>
+      <TextBlock Name="TotalMMCB"  Grid.Row="1" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0 "/>
+      <Label Content="Derivatives Profit/Loss:" Margin="10,2,0,2" Grid.Row="2" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      <TextBox Name="RinaDPL"  Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="PL_Changed"/>
+      <TextBox Name="WynandDPL"  Grid.Row="2" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="PL_Changed"/>
+      <TextBlock Name="TotalDPL"  Grid.Row="2" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0"/>
+      <Label Content="Total Cash:" Margin="10,2,0,2" Grid.Row="3" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      <TextBox Name="RinaTC"  Grid.Row="3" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="TC_Changed"/>
+      <TextBox Name="WynandTC"  Grid.Row="3" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="TC_Changed"/>
+      <TextBlock Name="TotalTC"  Grid.Row="3" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0"/>
+      <TextBox Name="RinaPV"  Grid.Row="4" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="PV_Changed"/>
+      <TextBox Name="WynandPV"  Grid.Row="4" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="PV_Changed"/>
+      <TextBlock Name="TotalPV"  Grid.Row="4" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0"/>
+      <TextBox Name="RinaATF"  Grid.Row="5" Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="ATF_Changed"/>
+      <TextBox Name="WynandATF"  Grid.Row="5" Grid.Column="2" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" TextChanged="ATF_Changed"/>
+      <TextBlock Name="TotalATF"  Grid.Row="5" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0"/>
+      <Label Content="PORTFOLIO VALUE:" Margin="10,2,0,2" Grid.Row="4" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      <Label Content="Available trading funds:" Margin="10,2,0,2" Grid.Row="5" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+      <Button Content="Import" Grid.Row="7" VerticalAlignment="Center" Click="ImportRina" Grid.Column="1" Width="50" HorizontalAlignment="Left" Height="22" Margin="10,0,0,0" ToolTip="Imports the copy buffer to Rina data" />
+      <Button Content="Import" Grid.Row="7" VerticalAlignment="Center" Click="ImportWynand" Grid.Column="2" Width="50" HorizontalAlignment="Left" Height="22" Margin="10,0,0,0" ToolTip="Imports the copy buffer to Wynand's data" />
+      <Button Content="Test" Grid.Row="7" VerticalAlignment="Center" Click="TestButton_Click" Width="50" HorizontalAlignment="Center" Height="22" Margin="0" />
+      <Button Content="Write to DB" Grid.Row="7" VerticalAlignment="Center" Click="WriteToDatabase" HorizontalAlignment="Center" Height="22" Margin="0" />
+   </Grid>
+</Window>

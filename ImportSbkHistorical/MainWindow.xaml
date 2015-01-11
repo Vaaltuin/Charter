@@ -1,0 +1,32 @@
+﻿<Window x:Class="ImportSbkHistoricalData.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Importing Historical Data from SBK" Height="700" Width="700" Loaded="Window_Loaded">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="136*"/>
+      <RowDefinition Height="249*"/>
+    </Grid.RowDefinitions>
+    <DataGrid x:Name="dgQuotes" ItemsSource="{Binding}" Margin="0" Grid.Row="1"/>
+    <Grid Margin="0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="501*"/>
+        <ColumnDefinition Width="191*"/>
+      </Grid.ColumnDefinitions>
+      <ListView x:Name="lvFiles" Margin="0">
+        <ListView.View>
+          <GridView>
+            <GridViewColumn/>
+          </GridView>
+        </ListView.View>
+      </ListView>
+      <StackPanel Grid.Column="1">
+        <StackPanel Orientation="Horizontal" Margin="2,0,0,0"/>
+        <Button x:Name="btnReadFile" Content="Import" HorizontalAlignment="Left" Margin="0" VerticalAlignment="Top" Width="75" 
+            Click="btnReadFile_Click" Grid.Column="1" Height="22"/>
+
+      </StackPanel>
+    </Grid>
+
+  </Grid>
+</Window>

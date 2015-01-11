@@ -1,0 +1,36 @@
+﻿<RibbonWindow x:Class="WpfApplication1.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MainWindow" Height="350" Width="525">
+   <Grid>
+      <Ribbon>
+         <RibbonTab x:Name="FirstTab" Header="Tab1">
+            <RibbonGroup Header="Group 1">
+               <RibbonButton Background="Azure" Label="Button 1.1"/>
+               <RibbonSplitButton Label="Button1.2"></RibbonSplitButton>
+               <RibbonComboBox Label="Combo"></RibbonComboBox>
+            </RibbonGroup>
+            <RibbonGroup Header="Group 2">
+               <RibbonButton Background="Bisque" Label="Button 3"/>
+               <RibbonButton Background="MintCream" Label="Button 4"/>
+            </RibbonGroup>
+         </RibbonTab>
+         <RibbonTab Header="Tab2">
+            <RibbonGroup Header="Group 3">
+               <RibbonButton Background="Azure" Label="Button 5"/>
+               <RibbonButton Background="AliceBlue" Label="Button 6"/>
+            </RibbonGroup>
+         </RibbonTab>
+         <Ribbon.QuickAccessToolBar>
+            <RibbonQuickAccessToolBar>
+               <RibbonQuickAccessToolBar.Items>
+                  <RibbonButton SmallImageSource="Images\Save_16.png" />
+                  <RibbonButton SmallImageSource="Images\Undo_16.png" />
+                  <RibbonButton SmallImageSource="Images\Redo_16.png" />
+                  <RibbonContentPresenter></RibbonContentPresenter>
+               </RibbonQuickAccessToolBar.Items>
+            </RibbonQuickAccessToolBar>
+         </Ribbon.QuickAccessToolBar>
+      </Ribbon>
+   </Grid>
+</RibbonWindow>
